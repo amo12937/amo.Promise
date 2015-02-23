@@ -202,4 +202,73 @@ class PromiseTests: XCTestCase {
             dispatch_semaphore_signal(semaphore)
         }
     }
+    
+    func test_zipの動作() {
+        self.async { done in
+            
+            let expected_t = 100
+            let expected_u = "String"
+            
+            let pt = Promise<Int>.resolve(expected_t)
+            let pu = Promise<String>.resolve(expected_u)
+            
+            zip(pt, pu).then({ t, u -> Void in
+                XCTAssertEqual(t, expected_t, "")
+                XCTAssertEqual(u, expected_u, "")
+                
+                done()
+            })
+        }
+    }
+    
+    func test_zipの動作_並列的に実行される() {
+        let when = { sec in dispatch_time(DISPATCH_TIME_NOW, Int64(sec * Double(NSEC_PER_SEC))) }
+        self.async { done in
+            let queue = dispatch_queue_create("for test", nil)
+            
+            let expected_t = 100
+            let expected_u = "String"
+            
+            let pt = Promise<Int>({ deferred in
+                dispatch_after(when(0.8), queue) {
+                    deferred.resolve(expected_t)
+                }
+            })
+            let pu = Promise<String>({ deferred in
+                dispatch_after(when(0.8), queue) {
+                    deferred.resolve(expected_u)
+                }
+            })
+            
+            zip(pt, pu).then({ t, u -> Void in
+                XCTAssertEqual(t, expected_t, "")
+                XCTAssertEqual(u, expected_u, "")
+                
+                done()
+            })
+        }
+    }
+    
+    func test_zipがエラーの場合_即座にcatch処理へ入る() {
+        let when = { sec in dispatch_time(DISPATCH_TIME_NOW, Int64(sec * Double(NSEC_PER_SEC))) }
+        var cnt = 0
+        let counter = { ++cnt }
+        self.async { done in
+            
+            let pt = Promise<Int>({ deferred in
+                dispatch_after(when(0.8), dispatch_get_main_queue()) {
+                    deferred.resolve(100)
+                }
+            })
+            let pu = Promise<String>.reject(NSError())
+            
+            zip(pt, pu).then({ t, u -> Void in
+                counter()
+                XCTAssertFalse(true, "")
+            }).catch({ e -> Void in
+                XCTAssertEqual(cnt, 0, "")
+                done()
+            })
+        }
+    }
 }
