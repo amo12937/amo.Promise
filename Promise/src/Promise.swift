@@ -157,3 +157,35 @@ public class Promise<T> {
         }, q)
     }
 }
+
+public func zip<T, U>(pt: Promise<T>, pu: Promise<U>, _ queue: dispatch_queue_t? = nil) -> Promise<(T, U)> {
+    let q = queue ?? promise_default_queue
+    return Promise<(T, U)>({ deferred in
+        var counter = 2
+        var values: (T?, U?) = (nil, nil)
+        
+        pt.then({ val -> () in
+            dispatch_async(q) {
+                if let u = values.1 {
+                    deferred.resolve(val, u)
+                } else {
+                    values.0 = val
+                }
+            }
+        }).catch({ e -> () in
+            deferred.reject(e)
+        })
+        
+        pu.then({ val -> () in
+            dispatch_async(q) {
+                if let t = values.0 {
+                    deferred.resolve(t, val)
+                } else {
+                    values.1 = val
+                }
+            }
+        }).catch({ e -> () in
+            deferred.reject(e)
+        })
+    }, q)
+}
